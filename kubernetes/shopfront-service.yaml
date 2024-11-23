@@ -2,13 +2,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: shopfront
+  name: shopfront1
   labels:
-    app: shopfront
+    app: shopfront1
 spec:
   type: NodePort
   selector:
-    app: shopfront
+    app: shopfront1
   ports:
   - protocol: TCP
     port: 8010
@@ -18,19 +18,19 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: shopfront
+  name: shopfront1
 spec:
   selector:
     matchLabels:
-      app: shopfront
+      app: shopfront1
   replicas: 1
   template:
     metadata:
       labels:
-        app: shopfront
+        app: shopfront1
     spec:
       containers:
-      - name: shopfront
+      - name: shopfront1
         image: phaneendrat7/shopfront:1.0.0
         ports:
         - containerPort: 8010
