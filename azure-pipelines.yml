@@ -1,46 +1,108 @@
-trigger:
--  main
-
-pool:
-  vmImage: ubuntu-latest
-
-steps:
-- task: Maven@3
-  inputs:
-    mavenPomFile: 'pom.xml'
-    mavenOptions: '-Xmx3072m'
-    javaHomeOption: 'JDKVersion'
-    jdkVersionOption: '1.8'
-    jdkArchitectureOption: 'x64'
-    publishJUnitResults: true
-    testResultsFiles: '**/surefire-reports/TEST-*.xml'
-    goals: 'package'
-
-
-
-
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 # trigger:
-# - main
+# -  main
 
 # pool:
 #   vmImage: ubuntu-latest
 
 # steps:
-# - script: echo Hello, world!
-#   displayName: 'Run a one-line script'
+# - task: Maven@3
+#   inputs:
+#     mavenPomFile: 'pom.xml'
+#     mavenOptions: '-Xmx3072m'
+#     javaHomeOption: 'JDKVersion'
+#     jdkVersionOption: '1.8'
+#     jdkArchitectureOption: 'x64'
+#     publishJUnitResults: true
+#     testResultsFiles: '**/surefire-reports/TEST-*.xml'
+#     goals: 'package'
 
-# - script: |
-#     echo Add other tasks to build, test, and deploy your project.
-#     echo See https://aka.ms/yaml
-#   displayName: 'Run a multi-line script'
 
-# # Maven
-# # Build your Java project and run tests with Apache Maven.
-# # Add steps that analyze code, save build artifacts, deploy, and more:
-# # https://docs.microsoft.com/azure/devops/pipelines/languages/java
 
+# Azure Pipeline with Variables, Conditions, Parameters, Resources, and Repositories
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+# Parameters
+parameters:
+  - name: deployEnvironment
+    displayName: "Deployment Environment"
+    type: string
+    default: "dev"
+    values:
+      - dev
+      - qa
+      - prod
+
+# Variables
+variables:
+  imageName: "my-app"
+  containerRegistry: "myacr.azurecr.io"
+  kubernetesNamespace: "$(deployEnvironment)-namespace"
+
+# Repositories
+resources:
+  repositories:
+  - repository: self
+    type: git
+  - repository: templatesRepo
+    type: git
+    name: company/templates
+    ref: refs/heads/main
+
+# Stages
+stages:
+
+- stage: Build
+  displayName: Build Stage
+  jobs:
+  - job: BuildJob
+    displayName: Build the Docker image
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: Docker@2
+      displayName: Build Docker Image
+      inputs:
+        command: build
+        dockerfile: Dockerfile
+        containerRegistry: $(containerRegistry)
+        repository: $(imageName)
+        tags: |
+          $(Build.BuildId)
+
+- stage: Deploy
+  displayName: Deploy Stage
+  dependsOn: Build
+  condition: eq(parameters.deployEnvironment, 'prod')
+  jobs:
+  - deployment: DeployToK8s
+    displayName: Deploy to Kubernetes
+    environment: $(deployEnvironment)
+    pool:
+      vmImage: ubuntu-latest
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: Kubernetes@1
+            displayName: Deploy to Kubernetes
+            inputs:
+              connectionType: "Kubernetes Service Connection"
+              namespace: $(kubernetesNamespace)
+              command: apply
+              useConfigurationFile: true
+              configuration: "manifests/deployment.yaml"
+              secretType: "dockerRegistry"
+
+# Example Conditions
+# - script: echo "This will only run in production"
+# condition: eq(parameters.deployEnvironment, 'prod')
